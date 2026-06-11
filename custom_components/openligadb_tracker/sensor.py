@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory
+from homeassistant.const import UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -23,9 +25,37 @@ class OpenLigaDBSensorDescription:
     name: str
     value_fn: Callable[[object], object]
     icon: str
+    native_unit_of_measurement: str | UnitOfTime | None = None
 
 
 SENSOR_DESCRIPTIONS = (
+    OpenLigaDBSensorDescription(
+        key="table_position",
+        name="Table Position",
+        value_fn=lambda data: 1 if data.table_leader else None,
+        icon="mdi:trophy-outline",
+    ),
+    OpenLigaDBSensorDescription(
+        key="points",
+        name="Points",
+        value_fn=lambda data: data.table_leader.get("points") if data.table_leader else None,
+        icon="mdi:counter",
+        native_unit_of_measurement="pts",
+    ),
+    OpenLigaDBSensorDescription(
+        key="goals_scored",
+        name="Goals Scored",
+        value_fn=lambda data: data.table_leader.get("goals") if data.table_leader else None,
+        icon="mdi:soccer",
+        native_unit_of_measurement="goals",
+    ),
+    OpenLigaDBSensorDescription(
+        key="goals_conceded",
+        name="Goals Conceded",
+        value_fn=lambda data: data.table_leader.get("opponentGoals") if data.table_leader else None,
+        icon="mdi:soccer-field",
+        native_unit_of_measurement="goals",
+    ),
     OpenLigaDBSensorDescription(
         key="table_leader",
         name="Table Leader",
@@ -48,7 +78,30 @@ SENSOR_DESCRIPTIONS = (
         ),
         icon="mdi:calendar",
     ),
+    OpenLigaDBSensorDescription(
+        key="next_match_time",
+        name="Next Match Time",
+        value_fn=lambda data: _local_match_time(data.next_match.match_datetime)
+        if data.next_match and data.next_match.match_datetime
+        else None,
+        icon="mdi:clock-outline",
+    ),
+    OpenLigaDBSensorDescription(
+        key="match_count",
+        name="Match Count",
+        value_fn=lambda data: len(data.matches),
+        icon="mdi:calendar-multiple",
+        native_unit_of_measurement="matches",
+    ),
 )
+
+
+def _local_match_time(match_datetime: str) -> str:
+    """Convert OpenLigaDB UTC-like timestamps into local ISO strings."""
+    parsed = datetime.fromisoformat(match_datetime)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=ZoneInfo("UTC"))
+    return parsed.astimezone(ZoneInfo("Europe/Berlin")).isoformat()
 
 
 async def async_setup_entry(
@@ -88,7 +141,7 @@ class OpenLigaDBSensor(CoordinatorEntity[OpenLigaDBCoordinator], SensorEntity):
             model="Football competition tracker",
         )
         self._attr_icon = description.icon
-        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        self._attr_native_unit_of_measurement = description.native_unit_of_measurement
 
     @property
     def native_value(self):
