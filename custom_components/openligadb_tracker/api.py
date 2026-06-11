@@ -1,0 +1,105 @@
+"""OpenLigaDB API client."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+from aiohttp import ClientSession
+from homeassistant.exceptions import HomeAssistantError
+
+BASE_URL = "https://api.openligadb.de"
+
+
+@dataclass(slots=True)
+class OpenLigaDBMatchSummary:
+    """Flattened match data used by sensors."""
+
+    match_id: int
+    home_team: str
+    away_team: str
+    match_datetime: str
+    finished: bool
+    group_name: str | None
+    home_score: int | None
+    away_score: int | None
+    top_scorer_name: str | None = None
+    top_scorer_goals: int = 0
+
+
+class OpenLigaDBAPI:
+    """Small helper around the public OpenLigaDB endpoints."""
+
+    def __init__(self, session: ClientSession) -> None:
+        self._session = session
+
+    async def _async_get_json(self, path: str) -> Any:
+        url = f"{BASE_URL}{path}"
+        async with self._session.get(url, timeout=30) as response:
+            if response.status != 200:
+                text = await response.text()
+                raise HomeAssistantError(
+                    f"OpenLigaDB request failed ({response.status}): {text}"
+                )
+            return await response.json()
+
+    async def async_get_table(self, league_shortcut: str, season: int) -> list[dict[str, Any]]:
+        """Get the table for a league."""
+        data = await self._async_get_json(f"/getbltable/{league_shortcut}/{season}")
+        return data if isinstance(data, list) else []
+
+    async def async_get_matches(
+        self, league_shortcut: str, season: int, group_id: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Get matches for a league and optionally a specific group."""
+        path = f"/getmatchdata/{league_shortcut}/{season}"
+        if group_id is not None:
+            path = f"{path}/{group_id}"
+        data = await self._async_get_json(path)
+        return data if isinstance(data, list) else []
+
+    @staticmethod
+    def build_match_summaries(matches: list[dict[str, Any]]) -> list[OpenLigaDBMatchSummary]:
+        """Convert raw OpenLigaDB match JSON into a simpler structure."""
+        summaries: list[OpenLigaDBMatchSummary] = []
+        for match in matches:
+            goals = match.get("goals") or []
+            scorer_counts: dict[str, int] = {}
+            for goal in goals:
+                scorer = goal.get("goalGetterName")
+                if scorer:
+                    scorer_counts[scorer] = scorer_counts.get(scorer, 0) + 1
+
+            top_scorer_name = None
+            top_scorer_goals = 0
+            if scorer_counts:
+                top_scorer_name, top_scorer_goals = max(
+                    scorer_counts.items(), key=lambda item: item[1]
+                )
+
+            match_results = match.get("matchResults") or []
+            full_time = next(
+                (
+                    result
+                    for result in match_results
+                    if result.get("resultName", "").lower() == "endergebnis"
+                ),
+                None,
+            )
+
+            summaries.append(
+                OpenLigaDBMatchSummary(
+                    match_id=match.get("matchID"),
+                    home_team=(match.get("team1") or {}).get("teamName", ""),
+                    away_team=(match.get("team2") or {}).get("teamName", ""),
+                    match_datetime=match.get("matchDateTime", ""),
+                    finished=bool(match.get("matchIsFinished")),
+                    group_name=(match.get("group") or {}).get("groupName"),
+                    home_score=full_time.get("pointsTeam1") if full_time else None,
+                    away_score=full_time.get("pointsTeam2") if full_time else None,
+                    top_scorer_name=top_scorer_name,
+                    top_scorer_goals=top_scorer_goals,
+                )
+            )
+        return summaries
+
