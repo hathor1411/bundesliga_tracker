@@ -10,6 +10,7 @@ from homeassistant.data_entry_flow import FlowResult
 from .const import (
     COMPETITIONS,
     CONF_COMPETITION,
+    CONF_CREATE_DASHBOARD,
     CONF_FAVORITE_TEAM,
     CONF_SEASON,
     DEFAULT_SEASON,
@@ -30,6 +31,10 @@ def _base_schema(defaults: dict[str, object] | None = None) -> vol.Schema:
                 CONF_FAVORITE_TEAM,
                 default=defaults.get(CONF_FAVORITE_TEAM, ""),
             ): str,
+            vol.Required(
+                CONF_CREATE_DASHBOARD,
+                default=defaults.get(CONF_CREATE_DASHBOARD, True),
+            ): bool,
         }
     )
 
@@ -43,6 +48,10 @@ def _favorite_team_schema(defaults: dict[str, object] | None = None) -> vol.Sche
                 CONF_FAVORITE_TEAM,
                 default=defaults.get(CONF_FAVORITE_TEAM, ""),
             ): str,
+            vol.Required(
+                CONF_CREATE_DASHBOARD,
+                default=defaults.get(CONF_CREATE_DASHBOARD, True),
+            ): bool,
         }
     )
 
@@ -58,12 +67,14 @@ class OpenLigaDBConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             competition = str(user_input[CONF_COMPETITION])
             season = int(user_input[CONF_SEASON])
             favorite_team = str(user_input.get(CONF_FAVORITE_TEAM, "")).strip()
+            create_dashboard = bool(user_input.get(CONF_CREATE_DASHBOARD, True))
             await self.async_set_unique_id(f"{competition}_{season}")
             self._abort_if_unique_id_configured()
 
             data = {
                 CONF_COMPETITION: competition,
                 CONF_SEASON: season,
+                CONF_CREATE_DASHBOARD: create_dashboard,
             }
             if favorite_team:
                 data[CONF_FAVORITE_TEAM] = favorite_team
@@ -88,17 +99,23 @@ class OpenLigaDBOptionsFlow(config_entries.OptionsFlowWithReload):
         """Manage the options."""
         if user_input is not None:
             favorite_team = str(user_input.get(CONF_FAVORITE_TEAM, "")).strip()
+            create_dashboard = bool(user_input.get(CONF_CREATE_DASHBOARD, True))
             options = dict(self.config_entry.options)
             if favorite_team:
                 options[CONF_FAVORITE_TEAM] = favorite_team
             else:
                 options.pop(CONF_FAVORITE_TEAM, None)
+            options[CONF_CREATE_DASHBOARD] = create_dashboard
             return self.async_create_entry(title="", data=options)
 
         defaults = {
             CONF_FAVORITE_TEAM: self.config_entry.options.get(
                 CONF_FAVORITE_TEAM,
                 self.config_entry.data.get(CONF_FAVORITE_TEAM, ""),
+            ),
+            CONF_CREATE_DASHBOARD: self.config_entry.options.get(
+                CONF_CREATE_DASHBOARD,
+                self.config_entry.data.get(CONF_CREATE_DASHBOARD, True),
             ),
         }
         return self.async_show_form(
