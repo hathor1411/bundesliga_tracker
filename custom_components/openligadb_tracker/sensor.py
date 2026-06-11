@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTime
 from homeassistant.core import HomeAssistant
@@ -25,6 +25,7 @@ class OpenLigaDBSensorDescription:
     name: str
     value_fn: Callable[[object], object]
     icon: str
+    device_class: SensorDeviceClass | None = None
     native_unit_of_measurement: str | UnitOfTime | None = None
 
 
