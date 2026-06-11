@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 from zoneinfo import ZoneInfo
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTime
 from homeassistant.core import HomeAssistant
@@ -19,16 +24,11 @@ from .const import COMPETITIONS, CONF_COMPETITION, CONF_SEASON, DOMAIN
 from .coordinator import OpenLigaDBCoordinator
 
 
-@dataclass(slots=True)
-class OpenLigaDBSensorDescription:
-    key: str
-    name: str
-    value_fn: Callable[[object], object]
-    icon: str
-    device_class: SensorDeviceClass | None = None
-    entity_registry_enabled_default: bool = True
-    entity_registry_visible_default: bool = True
-    native_unit_of_measurement: str | UnitOfTime | None = None
+@dataclass(slots=True, frozen=True)
+class OpenLigaDBSensorDescription(SensorEntityDescription):
+    """Describe one OpenLigaDB sensor."""
+
+    value_fn: Callable[[object], Any] = field(compare=False)
 
 
 SENSOR_DESCRIPTIONS = (
@@ -84,10 +84,11 @@ SENSOR_DESCRIPTIONS = (
     OpenLigaDBSensorDescription(
         key="next_match_time",
         name="Next Match Time",
-        value_fn=lambda data: _local_match_time(data.next_match.match_datetime)
+        value_fn=lambda data: _local_match_time_dt(data.next_match.match_datetime)
         if data.next_match and data.next_match.match_datetime
         else None,
         icon="mdi:clock-outline",
+        device_class=SensorDeviceClass.TIMESTAMP,
     ),
     OpenLigaDBSensorDescription(
         key="match_count",
@@ -99,12 +100,12 @@ SENSOR_DESCRIPTIONS = (
 )
 
 
-def _local_match_time(match_datetime: str) -> str:
-    """Convert OpenLigaDB UTC-like timestamps into local ISO strings."""
+def _local_match_time_dt(match_datetime: str) -> datetime:
+    """Convert OpenLigaDB timestamps into a timezone-aware local datetime."""
     parsed = datetime.fromisoformat(match_datetime)
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=ZoneInfo("UTC"))
-    return parsed.astimezone(ZoneInfo("Europe/Berlin")).isoformat()
+    return parsed.astimezone(ZoneInfo("Europe/Berlin"))
 
 
 async def async_setup_entry(
@@ -115,8 +116,10 @@ async def async_setup_entry(
     """Set up sensors for a config entry."""
     coordinator: OpenLigaDBCoordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(
-        OpenLigaDBSensor(coordinator, entry, description)
-        for description in SENSOR_DESCRIPTIONS
+        [
+            OpenLigaDBSensor(coordinator, entry, description)
+            for description in SENSOR_DESCRIPTIONS
+        ]
     )
 
 
