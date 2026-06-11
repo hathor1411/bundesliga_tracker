@@ -27,6 +27,7 @@ class OpenLigaDBSensorDescription:
     icon: str
     device_class: SensorDeviceClass | None = None
     entity_registry_enabled_default: bool = True
+    entity_registry_visible_default: bool = True
     native_unit_of_measurement: str | UnitOfTime | None = None
 
 
