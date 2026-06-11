@@ -26,6 +26,7 @@ class OpenLigaDBSensorDescription:
     value_fn: Callable[[object], object]
     icon: str
     device_class: SensorDeviceClass | None = None
+    entity_registry_enabled_default: bool = True
     native_unit_of_measurement: str | UnitOfTime | None = None
 
 
