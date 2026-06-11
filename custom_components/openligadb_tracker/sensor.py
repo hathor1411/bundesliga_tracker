@@ -75,7 +75,7 @@ COMMON_SENSOR_DESCRIPTIONS = (
 DFB_SENSOR_DESCRIPTIONS = (
     OpenLigaDBSensorDescription(
         key="round_overview",
-        name="Rundenübersicht",
+        name="Rundenuebersicht",
         value_fn=lambda data: len(data.rounds_payload()),
         icon="mdi:source-branch",
     ),
@@ -144,12 +144,7 @@ async def async_setup_entry(
         descriptions = list(TABLE_SENSOR_DESCRIPTIONS) + descriptions
     elif entry.data[CONF_COMPETITION] == "dfb_pokal":
         descriptions = list(DFB_SENSOR_DESCRIPTIONS) + descriptions
-    async_add_entities(
-        [
-            OpenLigaDBSensor(coordinator, entry, description)
-            for description in descriptions
-        ]
-    )
+    async_add_entities([OpenLigaDBSensor(coordinator, entry, description) for description in descriptions])
 
 
 class OpenLigaDBSensor(CoordinatorEntity[OpenLigaDBCoordinator], SensorEntity):
@@ -193,10 +188,13 @@ class OpenLigaDBSensor(CoordinatorEntity[OpenLigaDBCoordinator], SensorEntity):
 
         data = self.coordinator.data
         top_scorer = data.top_scorer
+
         if self.entity_description.key == "schedule":
             return {
                 "next_match": data.next_match_payload,
                 "upcoming_matches": data.upcoming_matches_payload(limit=10),
+                "favorite_team": data.favorite_team,
+                "favorite_match_context": data.favorite_match_context_payload(),
                 "competition": COMPETITIONS[str(self.coordinator.entry.data[CONF_COMPETITION])]["name"],
                 "season": self.coordinator.season,
             }
@@ -205,6 +203,7 @@ class OpenLigaDBSensor(CoordinatorEntity[OpenLigaDBCoordinator], SensorEntity):
             return {
                 "competition": COMPETITIONS[str(self.coordinator.entry.data[CONF_COMPETITION])]["name"],
                 "season": self.coordinator.season,
+                "favorite_team": data.favorite_team,
                 "rows": data.table_payload(),
                 "row_count": len(data.table),
             }
@@ -213,6 +212,7 @@ class OpenLigaDBSensor(CoordinatorEntity[OpenLigaDBCoordinator], SensorEntity):
             return {
                 "competition": COMPETITIONS[str(self.coordinator.entry.data[CONF_COMPETITION])]["name"],
                 "season": self.coordinator.season,
+                "favorite_team": data.favorite_team,
                 "rounds": data.rounds_payload(),
                 "round_count": len(data.rounds_payload()),
             }

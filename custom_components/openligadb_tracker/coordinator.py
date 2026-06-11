@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -15,7 +16,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import OpenLigaDBAPI, OpenLigaDBMatchSummary
-from .const import COMPETITIONS, CONF_COMPETITION, CONF_SEASON, DOMAIN
+from .const import COMPETITIONS, CONF_COMPETITION, CONF_FAVORITE_TEAM, CONF_SEASON, DOMAIN
 
 LOGGER = logging.getLogger(__name__)
 
@@ -24,9 +25,50 @@ LOGGER = logging.getLogger(__name__)
 class OpenLigaDBData:
     """Combined data fetched from OpenLigaDB."""
 
+    favorite_team: str | None
     table: list[dict[str, Any]]
     matches: list[dict[str, Any]]
     match_summaries: list[OpenLigaDBMatchSummary]
+
+    def _is_favorite_team(self, *names: str | None) -> bool:
+        """Return whether any provided team name matches the favorite team."""
+        if not self.favorite_team:
+            return False
+        favorite = _normalize_team_name(self.favorite_team)
+        return any(_normalize_team_name(name) == favorite for name in names if name)
+
+    def _match_team_side(self, match: OpenLigaDBMatchSummary) -> str | None:
+        """Return which side the favorite team plays on in a match."""
+        if self._is_favorite_team(match.home_team):
+            return "home"
+        if self._is_favorite_team(match.away_team):
+            return "away"
+        return None
+
+    def _match_payload(self, match: OpenLigaDBMatchSummary) -> dict[str, Any]:
+        """Convert a match summary into a UI-friendly payload."""
+        favorite_side = self._match_team_side(match)
+        has_favorite_team = favorite_side is not None
+        opponent = None
+        if favorite_side == "home":
+            opponent = match.away_team
+        elif favorite_side == "away":
+            opponent = match.home_team
+
+        return {
+            "match_id": match.match_id,
+            "kickoff": _to_local_iso(match.match_datetime),
+            "group": match.group_name,
+            "home_team": match.home_team,
+            "away_team": match.away_team,
+            "finished": match.finished,
+            "home_score": match.home_score,
+            "away_score": match.away_score,
+            "is_favorite_match": has_favorite_team,
+            "favorite_team_side": favorite_side,
+            "favorite_marker": "★" if has_favorite_team else "",
+            "opponent": opponent,
+        }
 
     @property
     def table_leader(self) -> dict[str, Any] | None:
@@ -36,11 +78,14 @@ class OpenLigaDBData:
         """Return a UI-friendly representation of the full standings table."""
         payload: list[dict[str, Any]] = []
         for index, row in enumerate(self.table, start=1):
+            is_favorite = self._is_favorite_team(row.get("teamName"), row.get("shortName"))
             payload.append(
                 {
                     "position": index,
                     "rank_color": _rank_color(index),
                     "rank_label": _rank_label(index),
+                    "is_favorite": is_favorite,
+                    "favorite_marker": "★" if is_favorite else "",
                     "team_name": row.get("teamName"),
                     "short_name": row.get("shortName"),
                     "points": row.get("points"),
@@ -70,18 +115,7 @@ class OpenLigaDBData:
                     "round_name": round_name,
                     "match_count": len(round_matches),
                     "finished_count": sum(1 for match in round_matches if match.finished),
-                    "matches": [
-                        {
-                            "match_id": match.match_id,
-                            "kickoff": _to_local_iso(match.match_datetime),
-                            "home_team": match.home_team,
-                            "away_team": match.away_team,
-                            "finished": match.finished,
-                            "home_score": match.home_score,
-                            "away_score": match.away_score,
-                        }
-                        for match in round_matches
-                    ],
+                    "matches": [self._match_payload(match) for match in round_matches],
                 }
             )
         return payload
@@ -114,19 +148,40 @@ class OpenLigaDBData:
 
     def upcoming_matches_payload(self, limit: int = 10) -> list[dict[str, Any]]:
         """Return a UI-friendly list of upcoming matches."""
-        payload: list[dict[str, Any]] = []
-        for match in self.upcoming_matches[:limit]:
-            payload.append(
-                {
-                    "match_id": match.match_id,
-                    "kickoff": _to_local_iso(match.match_datetime),
-                    "group": match.group_name,
-                    "home_team": match.home_team,
-                    "away_team": match.away_team,
-                    "finished": match.finished,
-                }
-            )
-        return payload
+        return [self._match_payload(match) for match in self.upcoming_matches[:limit]]
+
+    def favorite_match_context_payload(self) -> dict[str, Any] | None:
+        """Return previous/current/next matches around the next favorite match."""
+        if not self.favorite_team:
+            return None
+
+        favorite_matches = [
+            match for match in self.match_summaries if self._match_team_side(match) is not None
+        ]
+        if not favorite_matches:
+            return None
+
+        favorite_matches.sort(key=lambda match: match.match_datetime)
+        current_index = next(
+            (index for index, match in enumerate(favorite_matches) if not match.finished),
+            len(favorite_matches) - 1,
+        )
+
+        previous_match = favorite_matches[current_index - 1] if current_index > 0 else None
+        current_match = favorite_matches[current_index]
+        next_match = (
+            favorite_matches[current_index + 1]
+            if current_index + 1 < len(favorite_matches)
+            else None
+        )
+
+        return {
+            "favorite_team": self.favorite_team,
+            "previous": self._match_payload(previous_match) if previous_match else None,
+            "current": self._match_payload(current_match),
+            "next": self._match_payload(next_match) if next_match else None,
+            "total_favorite_matches": len(favorite_matches),
+        }
 
     @property
     def next_match_payload(self) -> dict[str, Any] | None:
@@ -134,14 +189,7 @@ class OpenLigaDBData:
         next_match = self.next_match
         if next_match is None:
             return None
-        return {
-            "match_id": next_match.match_id,
-            "kickoff": _to_local_iso(next_match.match_datetime),
-            "group": next_match.group_name,
-            "home_team": next_match.home_team,
-            "away_team": next_match.away_team,
-            "finished": next_match.finished,
-        }
+        return self._match_payload(next_match)
 
 
 def _to_local_iso(match_datetime: str) -> str:
@@ -150,6 +198,11 @@ def _to_local_iso(match_datetime: str) -> str:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=ZoneInfo("UTC"))
     return parsed.astimezone(ZoneInfo("Europe/Berlin")).isoformat()
+
+
+def _normalize_team_name(value: str | None) -> str:
+    """Normalize team names for comparison."""
+    return re.sub(r"\s+", " ", (value or "").strip()).casefold()
 
 
 def _rank_color(position: int) -> str:
@@ -183,6 +236,11 @@ class OpenLigaDBCoordinator(DataUpdateCoordinator[OpenLigaDBData]):
         self.entry = entry
         self.competition = str(entry.data[CONF_COMPETITION])
         self.season = int(entry.data[CONF_SEASON])
+        self.favorite_team = (
+            str(entry.options.get(CONF_FAVORITE_TEAM, "")).strip()
+            or str(entry.data.get(CONF_FAVORITE_TEAM, "")).strip()
+            or None
+        )
         self.shortcut = COMPETITIONS[self.competition]["shortcut"]
         self.api = OpenLigaDBAPI(async_get_clientsession(hass))
 
@@ -205,6 +263,7 @@ class OpenLigaDBCoordinator(DataUpdateCoordinator[OpenLigaDBData]):
             raise UpdateFailed(str(err)) from err
 
         return OpenLigaDBData(
+            favorite_team=self.favorite_team,
             table=table,
             matches=matches,
             match_summaries=self.api.build_match_summaries(matches),
