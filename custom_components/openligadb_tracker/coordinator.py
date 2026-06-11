@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -49,6 +50,52 @@ class OpenLigaDBData:
         if not scorer_counts:
             return None
         return max(scorer_counts.items(), key=lambda item: item[1])
+
+    @property
+    def upcoming_matches(self) -> list[OpenLigaDBMatchSummary]:
+        """Return not-yet-finished matches ordered by kickoff time."""
+        upcoming = [match for match in self.match_summaries if not match.finished]
+        upcoming.sort(key=lambda match: match.match_datetime)
+        return upcoming
+
+    def upcoming_matches_payload(self, limit: int = 10) -> list[dict[str, Any]]:
+        """Return a UI-friendly list of upcoming matches."""
+        payload: list[dict[str, Any]] = []
+        for match in self.upcoming_matches[:limit]:
+            payload.append(
+                {
+                    "match_id": match.match_id,
+                    "kickoff": _to_local_iso(match.match_datetime),
+                    "group": match.group_name,
+                    "home_team": match.home_team,
+                    "away_team": match.away_team,
+                    "finished": match.finished,
+                }
+            )
+        return payload
+
+    @property
+    def next_match_payload(self) -> dict[str, Any] | None:
+        """Return a UI-friendly payload for the next match."""
+        next_match = self.next_match
+        if next_match is None:
+            return None
+        return {
+            "match_id": next_match.match_id,
+            "kickoff": _to_local_iso(next_match.match_datetime),
+            "group": next_match.group_name,
+            "home_team": next_match.home_team,
+            "away_team": next_match.away_team,
+            "finished": next_match.finished,
+        }
+
+
+def _to_local_iso(match_datetime: str) -> str:
+    """Convert an OpenLigaDB timestamp to local ISO format."""
+    parsed = datetime.fromisoformat(match_datetime)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=ZoneInfo("UTC"))
+    return parsed.astimezone(ZoneInfo("Europe/Berlin")).isoformat()
 
 
 class OpenLigaDBCoordinator(DataUpdateCoordinator[OpenLigaDBData]):

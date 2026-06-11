@@ -33,6 +33,12 @@ class OpenLigaDBSensorDescription(SensorEntityDescription):
 
 SENSOR_DESCRIPTIONS = (
     OpenLigaDBSensorDescription(
+        key="schedule",
+        name="Spielplan",
+        value_fn=lambda data: len(data.upcoming_matches),
+        icon="mdi:calendar-month",
+    ),
+    OpenLigaDBSensorDescription(
         key="table_position",
         name="Table Position",
         value_fn=lambda data: 1 if data.table_leader else None,
@@ -164,6 +170,14 @@ class OpenLigaDBSensor(CoordinatorEntity[OpenLigaDBCoordinator], SensorEntity):
 
         data = self.coordinator.data
         top_scorer = data.top_scorer
+        if self.entity_description.key == "schedule":
+            return {
+                "next_match": data.next_match_payload,
+                "upcoming_matches": data.upcoming_matches_payload(limit=10),
+                "competition": COMPETITIONS[str(self.coordinator.entry.data[CONF_COMPETITION])]["name"],
+                "season": self.coordinator.season,
+            }
+
         return {
             "table_rows": len(data.table),
             "match_count": len(data.matches),
