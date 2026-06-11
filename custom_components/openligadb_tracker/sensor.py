@@ -74,6 +74,12 @@ COMMON_SENSOR_DESCRIPTIONS = (
 
 TABLE_SENSOR_DESCRIPTIONS = (
     OpenLigaDBSensorDescription(
+        key="table",
+        name="Tabelle",
+        value_fn=lambda data: data.table_leader["teamName"] if data.table_leader else None,
+        icon="mdi:table",
+    ),
+    OpenLigaDBSensorDescription(
         key="table_position",
         name="Table Position",
         value_fn=lambda data: 1 if data.table_leader else None,
@@ -182,6 +188,14 @@ class OpenLigaDBSensor(CoordinatorEntity[OpenLigaDBCoordinator], SensorEntity):
                 "upcoming_matches": data.upcoming_matches_payload(limit=10),
                 "competition": COMPETITIONS[str(self.coordinator.entry.data[CONF_COMPETITION])]["name"],
                 "season": self.coordinator.season,
+            }
+
+        if self.entity_description.key == "table":
+            return {
+                "competition": COMPETITIONS[str(self.coordinator.entry.data[CONF_COMPETITION])]["name"],
+                "season": self.coordinator.season,
+                "rows": data.table_payload(),
+                "row_count": len(data.table),
             }
 
         return {

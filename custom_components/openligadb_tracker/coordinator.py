@@ -32,6 +32,27 @@ class OpenLigaDBData:
     def table_leader(self) -> dict[str, Any] | None:
         return self.table[0] if self.table else None
 
+    def table_payload(self) -> list[dict[str, Any]]:
+        """Return a UI-friendly representation of the full standings table."""
+        payload: list[dict[str, Any]] = []
+        for index, row in enumerate(self.table, start=1):
+            payload.append(
+                {
+                    "position": index,
+                    "team_name": row.get("teamName"),
+                    "short_name": row.get("shortName"),
+                    "points": row.get("points"),
+                    "matches": row.get("matches"),
+                    "won": row.get("won"),
+                    "draw": row.get("draw"),
+                    "lost": row.get("lost"),
+                    "goals_scored": row.get("goals"),
+                    "goals_conceded": row.get("opponentGoals"),
+                    "goal_diff": row.get("goalDiff"),
+                }
+            )
+        return payload
+
     @property
     def next_match(self) -> OpenLigaDBMatchSummary | None:
         upcoming = [match for match in self.match_summaries if not match.finished]
