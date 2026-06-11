@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -14,6 +15,8 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import OpenLigaDBAPI, OpenLigaDBMatchSummary
 from .const import COMPETITIONS, CONF_COMPETITION, CONF_SEASON, DOMAIN
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -60,8 +63,10 @@ class OpenLigaDBCoordinator(DataUpdateCoordinator[OpenLigaDBData]):
 
         super().__init__(
             hass,
+            LOGGER,
             name=f"{DOMAIN}_{self.competition}_{self.season}",
             update_interval=timedelta(minutes=30),
+            config_entry=entry,
         )
 
     async def _async_update_data(self) -> OpenLigaDBData:
