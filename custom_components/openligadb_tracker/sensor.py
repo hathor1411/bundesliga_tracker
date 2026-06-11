@@ -24,7 +24,7 @@ from .const import COMPETITIONS, CONF_COMPETITION, CONF_SEASON, DOMAIN
 from .coordinator import OpenLigaDBCoordinator
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True, frozen=True, kw_only=True)
 class OpenLigaDBSensorDescription(SensorEntityDescription):
     """Describe one OpenLigaDB sensor."""
 
