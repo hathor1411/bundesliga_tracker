@@ -39,6 +39,8 @@ class OpenLigaDBData:
             payload.append(
                 {
                     "position": index,
+                    "rank_color": _rank_color(index),
+                    "rank_label": _rank_label(index),
                     "team_name": row.get("teamName"),
                     "short_name": row.get("shortName"),
                     "points": row.get("points"),
@@ -49,6 +51,37 @@ class OpenLigaDBData:
                     "goals_scored": row.get("goals"),
                     "goals_conceded": row.get("opponentGoals"),
                     "goal_diff": row.get("goalDiff"),
+                }
+            )
+        return payload
+
+    def rounds_payload(self) -> list[dict[str, Any]]:
+        """Return a grouped round overview for knockout competitions."""
+        rounds: dict[str, list[OpenLigaDBMatchSummary]] = {}
+        for match in self.match_summaries:
+            round_name = match.group_name or "Unbekannte Runde"
+            rounds.setdefault(round_name, []).append(match)
+
+        payload: list[dict[str, Any]] = []
+        for round_name in sorted(rounds.keys()):
+            round_matches = sorted(rounds[round_name], key=lambda match: match.match_datetime)
+            payload.append(
+                {
+                    "round_name": round_name,
+                    "match_count": len(round_matches),
+                    "finished_count": sum(1 for match in round_matches if match.finished),
+                    "matches": [
+                        {
+                            "match_id": match.match_id,
+                            "kickoff": _to_local_iso(match.match_datetime),
+                            "home_team": match.home_team,
+                            "away_team": match.away_team,
+                            "finished": match.finished,
+                            "home_score": match.home_score,
+                            "away_score": match.away_score,
+                        }
+                        for match in round_matches
+                    ],
                 }
             )
         return payload
@@ -117,6 +150,30 @@ def _to_local_iso(match_datetime: str) -> str:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=ZoneInfo("UTC"))
     return parsed.astimezone(ZoneInfo("Europe/Berlin")).isoformat()
+
+
+def _rank_color(position: int) -> str:
+    """Return a simple color label for a table rank."""
+    if position == 1:
+        return "gold"
+    if position == 2:
+        return "silver"
+    if position == 3:
+        return "bronze"
+    if position <= 6:
+        return "blue"
+    return "gray"
+
+
+def _rank_label(position: int) -> str:
+    """Return a short human-friendly label for a rank."""
+    if position == 1:
+        return "1. Platz"
+    if position == 2:
+        return "2. Platz"
+    if position == 3:
+        return "3. Platz"
+    return f"{position}. Platz"
 
 
 class OpenLigaDBCoordinator(DataUpdateCoordinator[OpenLigaDBData]):

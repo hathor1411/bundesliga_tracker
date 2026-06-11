@@ -72,6 +72,15 @@ COMMON_SENSOR_DESCRIPTIONS = (
     ),
 )
 
+DFB_SENSOR_DESCRIPTIONS = (
+    OpenLigaDBSensorDescription(
+        key="round_overview",
+        name="Rundenübersicht",
+        value_fn=lambda data: len(data.rounds_payload()),
+        icon="mdi:source-branch",
+    ),
+)
+
 TABLE_SENSOR_DESCRIPTIONS = (
     OpenLigaDBSensorDescription(
         key="table",
@@ -133,6 +142,8 @@ async def async_setup_entry(
     descriptions = list(COMMON_SENSOR_DESCRIPTIONS)
     if entry.data[CONF_COMPETITION] == "bundesliga":
         descriptions = list(TABLE_SENSOR_DESCRIPTIONS) + descriptions
+    elif entry.data[CONF_COMPETITION] == "dfb_pokal":
+        descriptions = list(DFB_SENSOR_DESCRIPTIONS) + descriptions
     async_add_entities(
         [
             OpenLigaDBSensor(coordinator, entry, description)
@@ -196,6 +207,14 @@ class OpenLigaDBSensor(CoordinatorEntity[OpenLigaDBCoordinator], SensorEntity):
                 "season": self.coordinator.season,
                 "rows": data.table_payload(),
                 "row_count": len(data.table),
+            }
+
+        if self.entity_description.key == "round_overview":
+            return {
+                "competition": COMPETITIONS[str(self.coordinator.entry.data[CONF_COMPETITION])]["name"],
+                "season": self.coordinator.season,
+                "rounds": data.rounds_payload(),
+                "round_count": len(data.rounds_payload()),
             }
 
         return {
