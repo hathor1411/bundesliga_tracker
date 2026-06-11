@@ -31,45 +31,12 @@ class OpenLigaDBSensorDescription(SensorEntityDescription):
     value_fn: Callable[[object], Any] = field(compare=False)
 
 
-SENSOR_DESCRIPTIONS = (
+COMMON_SENSOR_DESCRIPTIONS = (
     OpenLigaDBSensorDescription(
         key="schedule",
         name="Spielplan",
         value_fn=lambda data: len(data.upcoming_matches),
         icon="mdi:calendar-month",
-    ),
-    OpenLigaDBSensorDescription(
-        key="table_position",
-        name="Table Position",
-        value_fn=lambda data: 1 if data.table_leader else None,
-        icon="mdi:trophy-outline",
-    ),
-    OpenLigaDBSensorDescription(
-        key="points",
-        name="Points",
-        value_fn=lambda data: data.table_leader.get("points") if data.table_leader else None,
-        icon="mdi:counter",
-        native_unit_of_measurement="pts",
-    ),
-    OpenLigaDBSensorDescription(
-        key="goals_scored",
-        name="Goals Scored",
-        value_fn=lambda data: data.table_leader.get("goals") if data.table_leader else None,
-        icon="mdi:soccer",
-        native_unit_of_measurement="goals",
-    ),
-    OpenLigaDBSensorDescription(
-        key="goals_conceded",
-        name="Goals Conceded",
-        value_fn=lambda data: data.table_leader.get("opponentGoals") if data.table_leader else None,
-        icon="mdi:soccer-field",
-        native_unit_of_measurement="goals",
-    ),
-    OpenLigaDBSensorDescription(
-        key="table_leader",
-        name="Table Leader",
-        value_fn=lambda data: data.table_leader["teamName"] if data.table_leader else None,
-        icon="mdi:trophy",
     ),
     OpenLigaDBSensorDescription(
         key="top_scorer",
@@ -105,6 +72,42 @@ SENSOR_DESCRIPTIONS = (
     ),
 )
 
+TABLE_SENSOR_DESCRIPTIONS = (
+    OpenLigaDBSensorDescription(
+        key="table_position",
+        name="Table Position",
+        value_fn=lambda data: 1 if data.table_leader else None,
+        icon="mdi:trophy-outline",
+    ),
+    OpenLigaDBSensorDescription(
+        key="points",
+        name="Points",
+        value_fn=lambda data: data.table_leader.get("points") if data.table_leader else None,
+        icon="mdi:counter",
+        native_unit_of_measurement="pts",
+    ),
+    OpenLigaDBSensorDescription(
+        key="goals_scored",
+        name="Goals Scored",
+        value_fn=lambda data: data.table_leader.get("goals") if data.table_leader else None,
+        icon="mdi:soccer",
+        native_unit_of_measurement="goals",
+    ),
+    OpenLigaDBSensorDescription(
+        key="goals_conceded",
+        name="Goals Conceded",
+        value_fn=lambda data: data.table_leader.get("opponentGoals") if data.table_leader else None,
+        icon="mdi:soccer-field",
+        native_unit_of_measurement="goals",
+    ),
+    OpenLigaDBSensorDescription(
+        key="table_leader",
+        name="Table Leader",
+        value_fn=lambda data: data.table_leader["teamName"] if data.table_leader else None,
+        icon="mdi:trophy",
+    ),
+)
+
 
 def _local_match_time_dt(match_datetime: str) -> datetime:
     """Convert OpenLigaDB timestamps into a timezone-aware local datetime."""
@@ -121,10 +124,13 @@ async def async_setup_entry(
 ) -> None:
     """Set up sensors for a config entry."""
     coordinator: OpenLigaDBCoordinator = hass.data[DOMAIN][entry.entry_id]
+    descriptions = list(COMMON_SENSOR_DESCRIPTIONS)
+    if entry.data[CONF_COMPETITION] == "bundesliga":
+        descriptions = list(TABLE_SENSOR_DESCRIPTIONS) + descriptions
     async_add_entities(
         [
             OpenLigaDBSensor(coordinator, entry, description)
-            for description in SENSOR_DESCRIPTIONS
+            for description in descriptions
         ]
     )
 
