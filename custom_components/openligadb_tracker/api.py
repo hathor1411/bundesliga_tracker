@@ -27,6 +27,15 @@ class OpenLigaDBMatchSummary:
     top_scorer_goals: int = 0
 
 
+@dataclass(slots=True)
+class OpenLigaDBGoalGetter:
+    """Single entry from the OpenLigaDB top scorer list."""
+
+    goal_getter_id: int
+    goal_getter_name: str
+    goal_count: int
+
+
 class OpenLigaDBAPI:
     """Small helper around the public OpenLigaDB endpoints."""
 
@@ -57,6 +66,27 @@ class OpenLigaDBAPI:
             path = f"{path}/{group_id}"
         data = await self._async_get_json(path)
         return data if isinstance(data, list) else []
+
+    async def async_get_goal_getters(
+        self, league_shortcut: str, season: int
+    ) -> list[OpenLigaDBGoalGetter]:
+        """Get the competition top scorers."""
+        data = await self._async_get_json(f"/getgoalgetters/{league_shortcut}/{season}")
+        if not isinstance(data, list):
+            return []
+
+        goal_getters: list[OpenLigaDBGoalGetter] = []
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            goal_getters.append(
+                OpenLigaDBGoalGetter(
+                    goal_getter_id=int(item.get("goalGetterId") or 0),
+                    goal_getter_name=str(item.get("goalGetterName") or ""),
+                    goal_count=int(item.get("goalCount") or 0),
+                )
+            )
+        return goal_getters
 
     @staticmethod
     def build_match_summaries(matches: list[dict[str, Any]]) -> list[OpenLigaDBMatchSummary]:
@@ -102,4 +132,3 @@ class OpenLigaDBAPI:
                 )
             )
         return summaries
-

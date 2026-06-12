@@ -15,7 +15,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import OpenLigaDBAPI, OpenLigaDBMatchSummary
+from .api import OpenLigaDBAPI, OpenLigaDBGoalGetter, OpenLigaDBMatchSummary
 from .const import COMPETITIONS, CONF_COMPETITION, CONF_FAVORITE_TEAM, CONF_SEASON, DOMAIN
 
 LOGGER = logging.getLogger(__name__)
@@ -29,6 +29,7 @@ class OpenLigaDBData:
     table: list[dict[str, Any]]
     matches: list[dict[str, Any]]
     match_summaries: list[OpenLigaDBMatchSummary]
+    goal_getters: list[OpenLigaDBGoalGetter]
 
     def _is_favorite_team(self, *names: str | None) -> bool:
         """Return whether any provided team name matches the favorite team."""
@@ -128,6 +129,11 @@ class OpenLigaDBData:
 
     @property
     def top_scorer(self) -> tuple[str, int] | None:
+        if self.goal_getters:
+            top_goal_getter = max(self.goal_getters, key=lambda item: item.goal_count)
+            if top_goal_getter.goal_getter_name:
+                return top_goal_getter.goal_getter_name, top_goal_getter.goal_count
+
         scorer_counts: dict[str, int] = {}
         for match in self.matches:
             for goal in match.get("goals") or []:
@@ -255,9 +261,10 @@ class OpenLigaDBCoordinator(DataUpdateCoordinator[OpenLigaDBData]):
     async def _async_update_data(self) -> OpenLigaDBData:
         """Fetch table and match data."""
         try:
-            table, matches = await asyncio.gather(
+            table, matches, goal_getters = await asyncio.gather(
                 self.api.async_get_table(self.shortcut, self.season),
                 self.api.async_get_matches(self.shortcut, self.season),
+                self.api.async_get_goal_getters(self.shortcut, self.season),
             )
         except Exception as err:  # pragma: no cover - network errors are expected
             raise UpdateFailed(str(err)) from err
@@ -267,4 +274,5 @@ class OpenLigaDBCoordinator(DataUpdateCoordinator[OpenLigaDBData]):
             table=table,
             matches=matches,
             match_summaries=self.api.build_match_summaries(matches),
+            goal_getters=goal_getters,
         )
