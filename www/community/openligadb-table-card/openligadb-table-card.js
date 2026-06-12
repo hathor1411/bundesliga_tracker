@@ -1,235 +1,3 @@
-class OpenLigaDBTableCardEditor extends HTMLElement {
-  setConfig(config) {
-    this._config = {
-      entity: "",
-      title: "Tabelle",
-      show_favorite: true,
-      show_leader: true,
-      show_season: true,
-      compact: false,
-      champions_league_color: "#1f6feb",
-      europa_league_color: "#f59e0b",
-      conference_league_color: "#7c3aed",
-      relegation_color: "#dc2626",
-      ...config,
-    };
-
-    if (!this.shadowRoot) {
-      this.attachShadow({ mode: "open" });
-    }
-
-    this._render();
-  }
-
-  set hass(hass) {
-    this._hass = hass;
-    this._render();
-  }
-
-  connectedCallback() {
-    this._render();
-  }
-
-  _render() {
-    if (!this.shadowRoot || !this._config) {
-      return;
-    }
-
-    const c = this._config;
-
-    this.shadowRoot.innerHTML = `
-      <style>
-        :host {
-          display: block;
-          color: var(--primary-text-color);
-        }
-
-        .wrap {
-          display: grid;
-          gap: 14px;
-          padding: 16px;
-          border: 1px solid var(--divider-color);
-          border-radius: 16px;
-          background: var(--card-background-color, var(--ha-card-background, #fff));
-        }
-
-        .row {
-          display: grid;
-          gap: 10px;
-        }
-
-        .grid-2 {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 12px;
-        }
-
-        .grid-4 {
-          display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 12px;
-        }
-
-        .field {
-          display: grid;
-          gap: 6px;
-        }
-
-        .label {
-          font-size: 0.82rem;
-          color: var(--secondary-text-color);
-        }
-
-        ha-entity-picker,
-        ha-textfield,
-        input[type="text"] {
-          width: 100%;
-        }
-
-        .checks {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 8px 16px;
-        }
-
-        .check {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          font-size: 0.92rem;
-        }
-
-        input[type="color"] {
-          width: 100%;
-          min-height: 42px;
-          border: 1px solid var(--divider-color);
-          border-radius: 12px;
-          background: transparent;
-          padding: 0;
-        }
-
-        .hint {
-          color: var(--secondary-text-color);
-          font-size: 0.84rem;
-          line-height: 1.4;
-        }
-
-        @media (max-width: 800px) {
-          .grid-2,
-          .grid-4,
-          .checks {
-            grid-template-columns: 1fr;
-          }
-        }
-      </style>
-      <div class="wrap">
-        <div class="row">
-          <div class="field">
-            <div class="label">Sensor</div>
-            <ha-entity-picker
-              .hass=${this._hass}
-              .value=${c.entity || ""}
-              .label=${"Sensor"}
-              .includeDomains=${["sensor"]}
-            ></ha-entity-picker>
-          </div>
-          <div class="field">
-            <div class="label">Titel</div>
-            <ha-textfield .value=${c.title || ""} label="Titel"></ha-textfield>
-          </div>
-          <div class="checks">
-            <label class="check">
-              <input type="checkbox" data-key="show_favorite" ?checked=${c.show_favorite} />
-              Favoriten markieren
-            </label>
-            <label class="check">
-              <input type="checkbox" data-key="show_leader" ?checked=${c.show_leader} />
-              Tabellenfuehrer anzeigen
-            </label>
-            <label class="check">
-              <input type="checkbox" data-key="show_season" ?checked=${c.show_season} />
-              Wettbewerbssaison anzeigen
-            </label>
-            <label class="check">
-              <input type="checkbox" data-key="compact" ?checked=${c.compact} />
-              Kompakte Ansicht
-            </label>
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="label">Farben der Zonen</div>
-          <div class="grid-2">
-            ${this._colorField("champions_league_color", "Champions League-Gruppenphase", c.champions_league_color)}
-            ${this._colorField("europa_league_color", "Europa League-Gruppenphase", c.europa_league_color)}
-            ${this._colorField(
-              "conference_league_color",
-              "Europa Conference League-Qualifikationsphase",
-              c.conference_league_color
-            )}
-            ${this._colorField("relegation_color", "Abstieg", c.relegation_color)}
-          </div>
-        </div>
-
-        <div class="hint">
-          Die Card zeigt die Tabelle als echte Lovelace-Karte an. Diese Einstellungen werden direkt im UI gespeichert.
-        </div>
-      </div>
-    `;
-
-    this._bindInputs();
-  }
-
-  _colorField(key, label, value) {
-    return `
-      <div class="field">
-        <div class="label">${label}</div>
-        <input type="color" data-key="${key}" value="${value}" />
-      </div>
-    `;
-  }
-
-  _bindInputs() {
-    const emitChange = () => {
-      const config = { ...this._config };
-      const entityPicker = this.shadowRoot.querySelector("ha-entity-picker");
-      const titleField = this.shadowRoot.querySelector('ha-textfield[label="Titel"]');
-
-      config.entity = entityPicker?.value || "";
-      config.title = titleField?.value || "";
-
-      this.shadowRoot.querySelectorAll('input[type="checkbox"][data-key]').forEach((input) => {
-        config[input.dataset.key] = input.checked;
-      });
-      this.shadowRoot.querySelectorAll('input[type="color"][data-key]').forEach((input) => {
-        config[input.dataset.key] = input.value;
-      });
-
-      this._config = config;
-      this.dispatchEvent(new CustomEvent("config-changed", { detail: { config }, bubbles: true, composed: true }));
-    };
-
-    const entityPicker = this.shadowRoot.querySelector("ha-entity-picker");
-    const titleField = this.shadowRoot.querySelector('ha-textfield[label="Titel"]');
-
-    if (entityPicker) {
-      entityPicker.addEventListener("value-changed", emitChange);
-    }
-    if (titleField) {
-      titleField.addEventListener("change", emitChange);
-      titleField.addEventListener("input", emitChange);
-    }
-
-    this.shadowRoot.querySelectorAll('input[type="checkbox"][data-key]').forEach((input) => {
-      input.addEventListener("change", emitChange);
-    });
-    this.shadowRoot.querySelectorAll('input[type="color"][data-key]').forEach((input) => {
-      input.addEventListener("input", emitChange);
-      input.addEventListener("change", emitChange);
-    });
-  }
-}
-
 class OpenLigaDBTableCard extends HTMLElement {
   setConfig(config) {
     if (!config || !config.entity) {
@@ -243,10 +11,10 @@ class OpenLigaDBTableCard extends HTMLElement {
       showLeader: config.show_leader !== false,
       showSeason: config.show_season !== false,
       compact: config.compact === true,
-      championsLeagueColor: config.champions_league_color || "#1f6feb",
-      europaLeagueColor: config.europa_league_color || "#f59e0b",
-      conferenceLeagueColor: config.conference_league_color || "#7c3aed",
-      relegationColor: config.relegation_color || "#dc2626",
+      championsLeagueColor: this._toCssColor(config.champions_league_color, "#1f6feb"),
+      europaLeagueColor: this._toCssColor(config.europa_league_color, "#f59e0b"),
+      conferenceLeagueColor: this._toCssColor(config.conference_league_color, "#7c3aed"),
+      relegationColor: this._toCssColor(config.relegation_color, "#dc2626"),
     };
 
     if (!this.shadowRoot) {
@@ -531,7 +299,7 @@ class OpenLigaDBTableCard extends HTMLElement {
   _renderRow(row) {
     const color = this._rankColor(row.rank_color);
     const favorite = this._config.showFavorite && row.is_favorite;
-    const marker = row.favorite_marker || (favorite ? "★" : "");
+    const marker = row.favorite_marker || (favorite ? "*" : "");
     const category = this._categoryForPosition(row.position);
     const categoryClass = category ? `category-${category.key}` : "";
     const zoneLabel = category ? category.label : "";
@@ -618,8 +386,113 @@ class OpenLigaDBTableCard extends HTMLElement {
       .replaceAll("'", "&#39;");
   }
 
-  static getConfigElement() {
-    return document.createElement("openligadb-table-card-editor");
+  _toCssColor(value, fallback) {
+    if (Array.isArray(value) && value.length === 3) {
+      return `rgb(${value[0]}, ${value[1]}, ${value[2]})`;
+    }
+
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+
+    return fallback;
+  }
+
+  static getConfigForm() {
+    return {
+      schema: [
+        {
+          name: "entity",
+          required: true,
+          selector: {
+            entity: {
+              domain: "sensor",
+            },
+          },
+        },
+        {
+          name: "title",
+          selector: {
+            text: {},
+          },
+        },
+        {
+          type: "grid",
+          name: "options",
+          flatten: true,
+          schema: [
+            { name: "show_favorite", selector: { boolean: {} } },
+            { name: "show_leader", selector: { boolean: {} } },
+            { name: "show_season", selector: { boolean: {} } },
+            { name: "compact", selector: { boolean: {} } },
+          ],
+        },
+        {
+          type: "expandable",
+          name: "zone_colors",
+          flatten: true,
+          title: "Farben der Zonen",
+          schema: [
+            {
+              name: "champions_league_color",
+              selector: { color_rgb: {} },
+            },
+            {
+              name: "europa_league_color",
+              selector: { color_rgb: {} },
+            },
+            {
+              name: "conference_league_color",
+              selector: { color_rgb: {} },
+            },
+            {
+              name: "relegation_color",
+              selector: { color_rgb: {} },
+            },
+          ],
+        },
+      ],
+      computeLabel: (schema) => {
+        switch (schema.name) {
+          case "entity":
+            return "Sensor";
+          case "title":
+            return "Titel";
+          case "show_favorite":
+            return "Favoriten markieren";
+          case "show_leader":
+            return "Tabellenfuehrer anzeigen";
+          case "show_season":
+            return "Wettbewerbssaison anzeigen";
+          case "compact":
+            return "Kompakte Ansicht";
+          case "champions_league_color":
+            return "Champions League-Gruppenphase";
+          case "europa_league_color":
+            return "Europa League-Gruppenphase";
+          case "conference_league_color":
+            return "Europa Conference League-Qualifikationsphase";
+          case "relegation_color":
+            return "Abstieg";
+          default:
+            return undefined;
+        }
+      },
+      computeHelper: (schema) => {
+        if (schema.name === "entity") {
+          return "Wähle den Tabellen-Sensor der Integration aus.";
+        }
+        if (schema.name === "title") {
+          return "Wird als Karten-Titel angezeigt.";
+        }
+        return undefined;
+      },
+      assertConfig: (config) => {
+        if (!config.entity) {
+          throw new Error("An entity is required.");
+        }
+      },
+    };
   }
 
   static getStubConfig() {
@@ -654,7 +527,22 @@ window.customCards.push({
   type: "openligadb-table-card",
   name: "OpenLigaDB Table Card",
   description: "Shows the OpenLigaDB standings table in a compact Lovelace card.",
+  getEntitySuggestion: (hass, entityId) => {
+    const state = hass.states[entityId];
+    if (!state || state.attributes?.rows === undefined) {
+      return null;
+    }
+
+    return {
+      config: {
+        type: "custom:openligadb-table-card",
+        entity: entityId,
+        title: state.attributes.competition
+          ? `${state.attributes.competition} Tabelle`
+          : "Tabelle",
+      },
+    };
+  },
 });
 
-customElements.define("openligadb-table-card-editor", OpenLigaDBTableCardEditor);
 customElements.define("openligadb-table-card", OpenLigaDBTableCard);
