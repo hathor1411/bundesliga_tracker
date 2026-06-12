@@ -31,7 +31,8 @@ To use it in Home Assistant:
 
 1. Copy the folder to `config/www/community/openligadb-table-card/`.
 2. Add a Lovelace resource with URL `/local/community/openligadb-table-card/openligadb-table-card.js` and type `module`.
-3. Use the card in your dashboard:
+3. Add the card in Lovelace via the UI editor or use YAML if you prefer.
+4. Example YAML:
 
 ```yaml
 type: custom:openligadb-table-card
