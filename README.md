@@ -22,3 +22,19 @@ Custom integration for Home Assistant based on OpenLigaDB.
 ## API source
 
 - OpenLigaDB: https://www.openligadb.de/
+
+## Lovelace card
+
+This repository also contains a simple Lovelace card at `www/openligadb-table-card.js`.
+
+To use it in Home Assistant:
+
+1. Copy the file to `config/www/openligadb-table-card.js`.
+2. Add a Lovelace resource with URL `/local/openligadb-table-card.js` and type `module`.
+3. Use the card in your dashboard:
+
+```yaml
+type: custom:openligadb-table-card
+entity: sensor.bundesliga_2026_tabelle
+title: Bundesliga Tabelle
+```
