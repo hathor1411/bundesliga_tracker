@@ -43,12 +43,16 @@ Je nach Wettbewerb werden unter anderem folgende Daten bereitgestellt:
 
 ## Lovelace-Cards einbinden
 
-Zum Projekt gehoeren zwei Custom Cards:
+Die Lovelace-Cards liegen in einem separaten HACS-Repository:
+
+- [Bundesliga Tracker Cards](https://github.com/hathor1411/bundesliga_tracker_cards)
+
+Zum Karten-Repository gehoeren zwei Custom Cards:
 
 - Tabellenkarte
 - Spielplankarte
 
-Die Dateien liegen im Ordner `www/community/`.
+Nach der Installation liegen die Dateien im `www/community/`-Bereich von Home Assistant.
 
 ### 1. Tabellenkarte
 
@@ -105,8 +109,8 @@ Die Spielplankarte zeigt:
 
 ### Karte in Home Assistant einbinden
 
-1. Die JS-Datei in `config/www/community/...` ablegen.
-2. In Home Assistant unter **Einstellungen** > **Dashboards** > **Ressourcen** die Datei als Modul eintragen.
+1. Das Karten-Repository ueber HACS installieren.
+2. In Home Assistant unter **Einstellungen** > **Dashboards** > **Ressourcen** die JS-Dateien als Module eintragen.
 3. Die Karte im Dashboard hinzufuegen.
 
 ## Datenquelle
@@ -116,12 +120,12 @@ Die Daten kommen von [OpenLigaDB](https://www.openligadb.de/).
 ## Projektstruktur
 
 - `custom_components/openligadb_tracker/` - Home-Assistant-Integration
-- `www/community/openligadb-table-card/` - Tabellenkarte
-- `www/community/openligadb-schedule-card/` - Spielplankarte
+- `www/community/openligadb-table-card/` - lokale Entwicklungs-Kopie der Tabellenkarte
+- `www/community/openligadb-schedule-card/` - lokale Entwicklungs-Kopie der Spielplankarte
+- `bundesliga_tracker_cards` - separates Dashboard-Repository fuer die Karten
 
 ## GitHub
 
 Repository:
 
 - [hathor1411/bundesliga_tracker](https://github.com/hathor1411/bundesliga_tracker)
-
