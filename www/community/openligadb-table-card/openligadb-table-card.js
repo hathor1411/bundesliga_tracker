@@ -12,10 +12,14 @@
       showLeader: config.show_leader !== false,
       showSeason: config.show_season !== false,
       compact: config.compact === true,
+      championsLeaguePlaces: this._toPositiveInteger(config.champions_league_places, 4),
+      europaLeaguePlaces: this._toPositiveInteger(config.europa_league_places, 2),
+      conferenceLeaguePlaces: this._toPositiveInteger(config.conference_league_places, 1),
       favoriteColor: this._toCssColor(config.favorite_color, "#03a9f4"),
       championsLeagueColor: this._toCssColor(config.champions_league_color, "#1f6feb"),
       europaLeagueColor: this._toCssColor(config.europa_league_color, "#f59e0b"),
       conferenceLeagueColor: this._toCssColor(config.conference_league_color, "#7c3aed"),
+      relegationPlayoffColor: this._toCssColor(config.relegation_playoff_color, "#f97316"),
       relegationColor: this._toCssColor(config.relegation_color, "#dc2626"),
     };
 
@@ -121,9 +125,31 @@
         }
 
         .leader {
-          text-align: right;
+          display: flex;
+          align-items: center;
+          gap: 10px;
           font-size: 0.88rem;
           color: var(--oldb-secondary);
+        }
+
+        .leader-logo,
+        .team-logo {
+          width: 20px;
+          height: 20px;
+          object-fit: contain;
+          flex: 0 0 auto;
+        }
+
+        .leader-logo {
+          width: 28px;
+          height: 28px;
+        }
+
+        .leader-text {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          line-height: 1.15;
         }
 
         .leader strong {
@@ -189,6 +215,8 @@
 
         .rank {
           width: 52px;
+          text-align: center;
+          border-radius: 10px;
         }
 
         .rank-badge {
@@ -206,24 +234,18 @@
         .team {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 6px;
           font-weight: 600;
+          line-height: 1.15;
+          min-height: 20px;
         }
 
-        .favorite-marker {
-          color: var(--oldb-favorite);
-          font-size: 1rem;
-        }
-
-        .zone {
-          display: inline-flex;
-          align-items: center;
-          padding: 3px 8px;
-          border-radius: 999px;
-          font-size: 0.72rem;
-          font-weight: 700;
-          color: white;
-          margin-top: 4px;
+        .team-name {
+          display: block;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
         .muted {
@@ -273,9 +295,12 @@
           ${
             leader && this._config.showLeader
               ? `<div class="leader">
-                  <span>Tabellenfuehrer</span>
-                  <strong>${this._escapeHtml(leader.team_name || leader.short_name || "-")}</strong>
-                  <span>${this._escapeHtml(String(leader.points ?? 0))} Punkte</span>
+                  ${(leader.team_url || leader.team_icon_url) ? `<img class="leader-logo" src="${this._escapeHtml(leader.team_url || leader.team_icon_url)}" alt="">` : ""}
+                  <div class="leader-text">
+                    <span>Tabellenfuehrer</span>
+                    <strong>${this._escapeHtml(leader.team_name || leader.short_name || "-")}</strong>
+                    <span>${this._escapeHtml(String(leader.points ?? 0))} Punkte</span>
+                  </div>
                 </div>`
               : ""
           }
@@ -303,14 +328,11 @@
   }
 
   _renderRow(row) {
-    const color = this._rankColor(row.rank_color);
+    const color = this._placementColor(row.position);
     const favorite = this._config.showFavorite && row.is_favorite;
     const favoriteRow = favorite && this._config.favoriteFullRow;
-    const marker = row.favorite_marker || (favorite ? "â˜…" : "");
     const category = this._categoryForPosition(row.position);
     const categoryClass = category ? `category-${category.key}` : "";
-    const zoneLabel = category ? category.label : "";
-    const zoneColor = category ? category.color : "";
     return `
       <tr class="${[favoriteRow ? "favorite" : "", categoryClass].filter(Boolean).join(" ")}">
         <td class="rank">
@@ -318,10 +340,9 @@
         </td>
         <td>
           <div class="team">
-            <span>${this._escapeHtml(row.team_name || row.short_name || "-")}</span>
-            ${marker ? `<span class="favorite-marker">${this._escapeHtml(marker)}</span>` : ""}
+            ${(row.team_url || row.team_icon_url) ? `<img class="team-logo" src="${this._escapeHtml(row.team_url || row.team_icon_url)}" alt="">` : ""}
+            <span class="team-name">${this._escapeHtml(row.team_name || row.short_name || "-")}</span>
           </div>
-          ${zoneLabel ? `<div class="zone" style="background:${zoneColor}">${this._escapeHtml(zoneLabel)}</div>` : ""}
           ${row.short_name && row.short_name !== row.team_name ? `<div class="muted">${this._escapeHtml(row.short_name)}</div>` : ""}
         </td>
         <td class="stat">${this._escapeHtml(String(row.points ?? "-"))}</td>
@@ -338,34 +359,41 @@
       return null;
     }
 
-    if (position <= 4) {
+    const championsMax = this._config.championsLeaguePlaces || 0;
+    const europaMax = championsMax + (this._config.europaLeaguePlaces || 0);
+    const conferenceMax = europaMax + (this._config.conferenceLeaguePlaces || 0);
+
+    if (championsMax > 0 && position <= championsMax) {
       return {
         key: "champions",
-        label: "Champions League",
         color: this._config.championsLeagueColor,
       };
     }
 
-    if (position <= 6) {
+    if (this._config.europaLeaguePlaces > 0 && position <= europaMax) {
       return {
         key: "europa",
-        label: "Europa League",
         color: this._config.europaLeagueColor,
       };
     }
 
-    if (position === 7) {
+    if (this._config.conferenceLeaguePlaces > 0 && position <= conferenceMax) {
       return {
         key: "conference",
-        label: "Conference League",
         color: this._config.conferenceLeagueColor,
       };
     }
 
     if (position >= 16) {
+      if (position === 16) {
+        return {
+          key: "relegation-playoff",
+          color: this._config.relegationPlayoffColor,
+        };
+      }
+
       return {
         key: "relegation",
-        label: "Abstieg",
         color: this._config.relegationColor,
       };
     }
@@ -373,15 +401,37 @@
     return null;
   }
 
-  _rankColor(rankColor) {
+  _placementColor(position) {
+    if (typeof position === "number") {
+      const championsMax = this._config.championsLeaguePlaces || 0;
+      const europaMax = championsMax + (this._config.europaLeaguePlaces || 0);
+      const conferenceMax = europaMax + (this._config.conferenceLeaguePlaces || 0);
+
+      if (championsMax > 0 && position <= championsMax) {
+        return this._config.championsLeagueColor;
+      }
+
+      if (this._config.europaLeaguePlaces > 0 && position <= europaMax) {
+        return this._config.europaLeagueColor;
+      }
+
+      if (this._config.conferenceLeaguePlaces > 0 && position <= conferenceMax) {
+        return this._config.conferenceLeagueColor;
+      }
+
+      if (position === 16) {
+        return this._config.relegationPlayoffColor;
+      }
+
+      if (position >= 17) {
+        return this._config.relegationColor;
+      }
+    }
+
     const colors = {
-      gold: "var(--oldb-gold)",
-      silver: "var(--oldb-silver)",
-      bronze: "var(--oldb-bronze)",
-      blue: "var(--oldb-blue)",
       gray: "var(--oldb-gray)",
     };
-    return colors[rankColor] || colors.gray;
+    return colors.gray;
   }
 
   _escapeHtml(value) {
@@ -400,6 +450,15 @@
 
     if (typeof value === "string" && value.trim()) {
       return value;
+    }
+
+    return fallback;
+  }
+
+  _toPositiveInteger(value, fallback) {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return parsed;
     }
 
     return fallback;
@@ -436,6 +495,46 @@
           ],
         },
         {
+          type: "grid",
+          name: "placements",
+          flatten: true,
+          schema: [
+            {
+              name: "champions_league_places",
+              selector: {
+                number: {
+                  min: 0,
+                  max: 10,
+                  step: 1,
+                  mode: "box",
+                },
+              },
+            },
+            {
+              name: "europa_league_places",
+              selector: {
+                number: {
+                  min: 0,
+                  max: 10,
+                  step: 1,
+                  mode: "box",
+                },
+              },
+            },
+            {
+              name: "conference_league_places",
+              selector: {
+                number: {
+                  min: 0,
+                  max: 10,
+                  step: 1,
+                  mode: "box",
+                },
+              },
+            },
+          ],
+        },
+        {
           name: "favorite_color",
           selector: { color_rgb: {} },
         },
@@ -455,6 +554,10 @@
             },
             {
               name: "conference_league_color",
+              selector: { color_rgb: {} },
+            },
+            {
+              name: "relegation_playoff_color",
               selector: { color_rgb: {} },
             },
             {
@@ -480,6 +583,12 @@
             return "Wettbewerbssaison anzeigen";
           case "compact":
             return "Kompakte Ansicht";
+          case "champions_league_places":
+            return "Plätze Champions League";
+          case "europa_league_places":
+            return "Plätze Europa League";
+          case "conference_league_places":
+            return "Plätze Conference League";
           case "favorite_color":
             return "Favoritenfarbe";
           case "champions_league_color":
@@ -488,8 +597,10 @@
             return "Europa League-Gruppenphase";
           case "conference_league_color":
             return "Europa Conference League-Qualifikationsphase";
+          case "relegation_playoff_color":
+            return "Relegationsplatz 16";
           case "relegation_color":
-            return "Abstieg";
+            return "Abstieg 17/18";
           default:
             return undefined;
         }
@@ -521,10 +632,14 @@
       show_leader: true,
       show_season: true,
       compact: false,
+      champions_league_places: 4,
+      europa_league_places: 2,
+      conference_league_places: 1,
       favorite_color: "#03a9f4",
       champions_league_color: "#1f6feb",
       europa_league_color: "#f59e0b",
       conference_league_color: "#7c3aed",
+      relegation_playoff_color: "#f97316",
       relegation_color: "#dc2626",
     };
   }
@@ -564,4 +679,5 @@ window.customCards.push({
 });
 
 customElements.define("openligadb-table-card", OpenLigaDBTableCard);
+
 

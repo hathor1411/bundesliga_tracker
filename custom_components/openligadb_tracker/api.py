@@ -18,11 +18,15 @@ class OpenLigaDBMatchSummary:
     match_id: int
     home_team: str
     away_team: str
+    home_team_icon_url: str | None
+    away_team_icon_url: str | None
     match_datetime: str
     finished: bool
     group_name: str | None
     home_score: int | None
     away_score: int | None
+    half_time_home_score: int | None = None
+    half_time_away_score: int | None = None
     top_scorer_name: str | None = None
     top_scorer_goals: int = 0
 
@@ -108,6 +112,14 @@ class OpenLigaDBAPI:
                 )
 
             match_results = match.get("matchResults") or []
+            half_time = next(
+                (
+                    result
+                    for result in match_results
+                    if result.get("resultName", "").lower() == "halbzeit"
+                ),
+                None,
+            )
             full_time = next(
                 (
                     result
@@ -122,9 +134,13 @@ class OpenLigaDBAPI:
                     match_id=match.get("matchID"),
                     home_team=(match.get("team1") or {}).get("teamName", ""),
                     away_team=(match.get("team2") or {}).get("teamName", ""),
+                    home_team_icon_url=(match.get("team1") or {}).get("teamIconUrl"),
+                    away_team_icon_url=(match.get("team2") or {}).get("teamIconUrl"),
                     match_datetime=match.get("matchDateTime", ""),
                     finished=bool(match.get("matchIsFinished")),
                     group_name=(match.get("group") or {}).get("groupName"),
+                    half_time_home_score=half_time.get("pointsTeam1") if half_time else None,
+                    half_time_away_score=half_time.get("pointsTeam2") if half_time else None,
                     home_score=full_time.get("pointsTeam1") if full_time else None,
                     away_score=full_time.get("pointsTeam2") if full_time else None,
                     top_scorer_name=top_scorer_name,

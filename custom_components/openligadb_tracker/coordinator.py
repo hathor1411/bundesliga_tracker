@@ -26,6 +26,7 @@ class OpenLigaDBData:
     """Combined data fetched from OpenLigaDB."""
 
     favorite_team: str | None
+    team_icons: dict[str, str]
     table: list[dict[str, Any]]
     matches: list[dict[str, Any]]
     match_summaries: list[OpenLigaDBMatchSummary]
@@ -62,7 +63,13 @@ class OpenLigaDBData:
             "group": match.group_name,
             "home_team": match.home_team,
             "away_team": match.away_team,
+            "home_team_url": match.home_team_icon_url,
+            "home_team_icon_url": match.home_team_icon_url,
+            "away_team_url": match.away_team_icon_url,
+            "away_team_icon_url": match.away_team_icon_url,
             "finished": match.finished,
+            "half_time_home_score": match.half_time_home_score,
+            "half_time_away_score": match.half_time_away_score,
             "home_score": match.home_score,
             "away_score": match.away_score,
             "is_favorite_match": has_favorite_team,
@@ -79,7 +86,9 @@ class OpenLigaDBData:
         """Return a UI-friendly representation of the full standings table."""
         payload: list[dict[str, Any]] = []
         for index, row in enumerate(self.table, start=1):
-            is_favorite = self._is_favorite_team(row.get("teamName"), row.get("shortName"))
+            team_name = row.get("teamName")
+            short_name = row.get("shortName")
+            is_favorite = self._is_favorite_team(team_name, short_name)
             payload.append(
                 {
                     "position": index,
@@ -87,8 +96,10 @@ class OpenLigaDBData:
                     "rank_label": _rank_label(index),
                     "is_favorite": is_favorite,
                     "favorite_marker": "★" if is_favorite else "",
-                    "team_name": row.get("teamName"),
-                    "short_name": row.get("shortName"),
+                    "team_name": team_name,
+                    "short_name": short_name,
+                    "team_url": self.team_icon_url(team_name, short_name),
+                    "team_icon_url": self.team_icon_url(team_name, short_name),
                     "points": row.get("points"),
                     "matches": row.get("matches"),
                     "won": row.get("won"),
@@ -100,6 +111,16 @@ class OpenLigaDBData:
                 }
             )
         return payload
+
+    def team_icon_url(self, *names: str | None) -> str | None:
+        """Return a known team icon URL for one of the provided names."""
+        for name in names:
+            if not name:
+                continue
+            normalized = _normalize_team_name(name)
+            if normalized in self.team_icons:
+                return self.team_icons[normalized]
+        return None
 
     def rounds_payload(self) -> list[dict[str, Any]]:
         """Return a grouped round overview for knockout competitions."""
@@ -156,6 +177,56 @@ class OpenLigaDBData:
         """Return a UI-friendly list of upcoming matches."""
         return [self._match_payload(match) for match in self.upcoming_matches[:limit]]
 
+    def favorite_matches(self) -> list[OpenLigaDBMatchSummary]:
+        """Return all matches that involve the favorite team."""
+        if not self.favorite_team:
+            return []
+
+        favorite_matches = [
+            match for match in self.match_summaries if self._match_team_side(match) is not None
+        ]
+        favorite_matches.sort(key=lambda match: match.match_datetime)
+        return favorite_matches
+
+    def favorite_matches_payload(self, limit: int = 3) -> dict[str, Any]:
+        """Return past and upcoming matches around the favorite team."""
+        favorite_matches = self.favorite_matches()
+        if not favorite_matches:
+            return {
+                "featured": None,
+                "previous": [],
+                "next": [],
+                "all_count": 0,
+            }
+
+        now = datetime.now(ZoneInfo("Europe/Berlin"))
+        live_match = next((match for match in favorite_matches if _is_match_live(match, now)), None)
+        future_matches = [match for match in favorite_matches if _match_datetime_local(match) > now]
+        latest_finished_match = next(
+            (match for match in reversed(favorite_matches) if _match_datetime_local(match) <= now),
+            None,
+        )
+
+        if live_match is not None:
+            featured_match = live_match
+        elif latest_finished_match is not None and now < _next_monday_0001(_match_datetime_local(latest_finished_match)):
+            featured_match = latest_finished_match
+        elif future_matches:
+            featured_match = future_matches[0]
+        else:
+            featured_match = latest_finished_match or favorite_matches[-1]
+
+        featured_index = favorite_matches.index(featured_match)
+        previous_matches = favorite_matches[:featured_index]
+        next_matches = favorite_matches[featured_index + 1 :]
+
+        return {
+            "featured": self._match_payload(featured_match) if featured_match else None,
+            "previous": [self._match_payload(match) for match in previous_matches[-limit:]][::-1],
+            "next": [self._match_payload(match) for match in next_matches[:limit]],
+            "all_count": len(favorite_matches),
+        }
+
     def favorite_match_context_payload(self) -> dict[str, Any] | None:
         """Return previous/current/next matches around the next favorite match."""
         if not self.favorite_team:
@@ -206,9 +277,51 @@ def _to_local_iso(match_datetime: str) -> str:
     return parsed.astimezone(ZoneInfo("Europe/Berlin")).isoformat()
 
 
+def _match_datetime_local(match: OpenLigaDBMatchSummary) -> datetime:
+    """Parse a match datetime as local time."""
+    parsed = datetime.fromisoformat(match.match_datetime)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=ZoneInfo("UTC"))
+    return parsed.astimezone(ZoneInfo("Europe/Berlin"))
+
+
+def _is_match_live(match: OpenLigaDBMatchSummary, now: datetime) -> bool:
+    """Return whether a match should be considered live in the UI."""
+    start = _match_datetime_local(match)
+    end = start + timedelta(minutes=105)
+    return start <= now < end and not match.finished
+
+
+def _next_monday_0001(reference: datetime) -> datetime:
+    """Return the next Monday at 00:01 after the given reference."""
+    start_of_day = reference.replace(hour=0, minute=0, second=0, microsecond=0)
+    days_ahead = (7 - start_of_day.weekday()) % 7
+    monday = start_of_day + timedelta(days=days_ahead)
+    if monday <= reference:
+        monday += timedelta(days=7)
+    return monday.replace(hour=0, minute=1)
+
+
 def _normalize_team_name(value: str | None) -> str:
     """Normalize team names for comparison."""
     return re.sub(r"\s+", " ", (value or "").strip()).casefold()
+
+
+def _build_team_icon_map(matches: list[dict[str, Any]]) -> dict[str, str]:
+    """Build a lookup of normalized team names to team icon URLs."""
+    team_icons: dict[str, str] = {}
+    for match in matches:
+        for side in ("team1", "team2"):
+            team = match.get(side) or {}
+            team_icon_url = team.get("teamIconUrl")
+            if not team_icon_url:
+                continue
+
+            for name in (team.get("teamName"), team.get("shortName")):
+                normalized = _normalize_team_name(name)
+                if normalized and normalized not in team_icons:
+                    team_icons[normalized] = team_icon_url
+    return team_icons
 
 
 def _rank_color(position: int) -> str:
@@ -271,6 +384,7 @@ class OpenLigaDBCoordinator(DataUpdateCoordinator[OpenLigaDBData]):
 
         return OpenLigaDBData(
             favorite_team=self.favorite_team,
+            team_icons=_build_team_icon_map(matches),
             table=table,
             matches=matches,
             match_summaries=self.api.build_match_summaries(matches),

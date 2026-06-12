@@ -195,6 +195,7 @@ class OpenLigaDBSensor(CoordinatorEntity[OpenLigaDBCoordinator], SensorEntity):
                 "upcoming_matches": data.upcoming_matches_payload(limit=10),
                 "favorite_team": data.favorite_team,
                 "favorite_match_context": data.favorite_match_context_payload(),
+                "favorite_matches": data.favorite_matches_payload(limit=34),
                 "competition": COMPETITIONS[str(self.coordinator.entry.data[CONF_COMPETITION])]["name"],
                 "season": self.coordinator.season,
             }
