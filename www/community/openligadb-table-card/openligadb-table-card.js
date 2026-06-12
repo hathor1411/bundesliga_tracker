@@ -1,4 +1,4 @@
-class OpenLigaDBTableCard extends HTMLElement {
+﻿class OpenLigaDBTableCard extends HTMLElement {
   setConfig(config) {
     if (!config || !config.entity) {
       throw new Error("You need to define an entity");
@@ -8,9 +8,11 @@ class OpenLigaDBTableCard extends HTMLElement {
       title: config.title || "Tabelle",
       entity: config.entity,
       showFavorite: config.show_favorite !== false,
+      favoriteFullRow: config.favorite_full_row !== false,
       showLeader: config.show_leader !== false,
       showSeason: config.show_season !== false,
       compact: config.compact === true,
+      favoriteColor: this._toCssColor(config.favorite_color, "#03a9f4"),
       championsLeagueColor: this._toCssColor(config.champions_league_color, "#1f6feb"),
       europaLeagueColor: this._toCssColor(config.europa_league_color, "#f59e0b"),
       conferenceLeagueColor: this._toCssColor(config.conference_league_color, "#7c3aed"),
@@ -67,7 +69,7 @@ class OpenLigaDBTableCard extends HTMLElement {
           --oldb-text: var(--primary-text-color);
           --oldb-secondary: var(--secondary-text-color);
           --oldb-border: var(--divider-color);
-          --oldb-favorite: var(--accent-color, #03a9f4);
+          --oldb-favorite: ${this._config.favoriteColor};
           --oldb-gold: #d4af37;
           --oldb-silver: #9aa4b2;
           --oldb-bronze: #cd7f32;
@@ -162,6 +164,10 @@ class OpenLigaDBTableCard extends HTMLElement {
         }
 
         tbody tr.favorite {
+          box-shadow: inset 6px 0 0 var(--oldb-favorite);
+        }
+
+        tbody tr.favorite td {
           background: color-mix(in srgb, var(--oldb-favorite) 12%, transparent);
         }
 
@@ -299,13 +305,14 @@ class OpenLigaDBTableCard extends HTMLElement {
   _renderRow(row) {
     const color = this._rankColor(row.rank_color);
     const favorite = this._config.showFavorite && row.is_favorite;
-    const marker = row.favorite_marker || (favorite ? "*" : "");
+    const favoriteRow = favorite && this._config.favoriteFullRow;
+    const marker = row.favorite_marker || (favorite ? "â˜…" : "");
     const category = this._categoryForPosition(row.position);
     const categoryClass = category ? `category-${category.key}` : "";
     const zoneLabel = category ? category.label : "";
     const zoneColor = category ? category.color : "";
     return `
-      <tr class="${[favorite ? "favorite" : "", categoryClass].filter(Boolean).join(" ")}">
+      <tr class="${[favoriteRow ? "favorite" : "", categoryClass].filter(Boolean).join(" ")}">
         <td class="rank">
           <span class="rank-badge" style="background:${color}">${this._escapeHtml(String(row.position ?? "-"))}</span>
         </td>
@@ -422,10 +429,15 @@ class OpenLigaDBTableCard extends HTMLElement {
           flatten: true,
           schema: [
             { name: "show_favorite", selector: { boolean: {} } },
+            { name: "favorite_full_row", selector: { boolean: {} } },
             { name: "show_leader", selector: { boolean: {} } },
             { name: "show_season", selector: { boolean: {} } },
             { name: "compact", selector: { boolean: {} } },
           ],
+        },
+        {
+          name: "favorite_color",
+          selector: { color_rgb: {} },
         },
         {
           type: "expandable",
@@ -460,12 +472,16 @@ class OpenLigaDBTableCard extends HTMLElement {
             return "Titel";
           case "show_favorite":
             return "Favoriten markieren";
+          case "favorite_full_row":
+            return "Favorit ueber ganze Zeile";
           case "show_leader":
             return "Tabellenfuehrer anzeigen";
           case "show_season":
             return "Wettbewerbssaison anzeigen";
           case "compact":
             return "Kompakte Ansicht";
+          case "favorite_color":
+            return "Favoritenfarbe";
           case "champions_league_color":
             return "Champions League-Gruppenphase";
           case "europa_league_color":
@@ -480,7 +496,7 @@ class OpenLigaDBTableCard extends HTMLElement {
       },
       computeHelper: (schema) => {
         if (schema.name === "entity") {
-          return "Wähle den Tabellen-Sensor der Integration aus.";
+          return "Waehle den Tabellen-Sensor der Integration aus.";
         }
         if (schema.name === "title") {
           return "Wird als Karten-Titel angezeigt.";
@@ -501,9 +517,11 @@ class OpenLigaDBTableCard extends HTMLElement {
       title: "Bundesliga Tabelle",
       entity: "sensor.bundesliga_2026_tabelle",
       show_favorite: true,
+      favorite_full_row: true,
       show_leader: true,
       show_season: true,
       compact: false,
+      favorite_color: "#03a9f4",
       champions_league_color: "#1f6feb",
       europa_league_color: "#f59e0b",
       conference_league_color: "#7c3aed",
@@ -546,3 +564,4 @@ window.customCards.push({
 });
 
 customElements.define("openligadb-table-card", OpenLigaDBTableCard);
+
