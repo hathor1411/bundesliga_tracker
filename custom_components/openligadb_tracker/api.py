@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from aiohttp import ClientSession
@@ -18,6 +18,8 @@ class OpenLigaDBMatchSummary:
     match_id: int
     home_team: str
     away_team: str
+    home_team_icon_url: str | None
+    away_team_icon_url: str | None
     match_datetime: str
     finished: bool
     group_name: str | None
@@ -25,13 +27,17 @@ class OpenLigaDBMatchSummary:
     away_score: int | None
     half_time_home_score: int | None = None
     half_time_away_score: int | None = None
-    extra_time_home_score: int | None = None
-    extra_time_away_score: int | None = None
-    penalty_home_score: int | None = None
-    penalty_away_score: int | None = None
-    result_details: list[dict[str, Any]] = field(default_factory=list)
     top_scorer_name: str | None = None
     top_scorer_goals: int = 0
+
+
+@dataclass(slots=True)
+class OpenLigaDBGoalGetter:
+    """Single entry from the OpenLigaDB top scorer list."""
+
+    goal_getter_id: int
+    goal_getter_name: str
+    goal_count: int
 
 
 class OpenLigaDBAPI:
@@ -65,47 +71,26 @@ class OpenLigaDBAPI:
         data = await self._async_get_json(path)
         return data if isinstance(data, list) else []
 
-    @staticmethod
-    def _result_label(result_name: str) -> str:
-        normalized = result_name.strip().lower()
-        if "halbzeit" in normalized:
-            return "HZ"
-        if "endergebnis" in normalized:
-            return "FT"
-        if "nachspielzeit" in normalized:
-            return "n.V."
-        if "elfmetersch" in normalized:
-            return "i.E."
-        return result_name.strip() or result_name
+    async def async_get_goal_getters(
+        self, league_shortcut: str, season: int
+    ) -> list[OpenLigaDBGoalGetter]:
+        """Get the competition top scorers."""
+        data = await self._async_get_json(f"/getgoalgetters/{league_shortcut}/{season}")
+        if not isinstance(data, list):
+            return []
 
-    @staticmethod
-    def _build_result_details(match_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        details: list[dict[str, Any]] = []
-        for result in sorted(
-            match_results,
-            key=lambda item: int(item.get("resultOrderID") or 0),
-        ):
-            result_name = str(result.get("resultName") or "").strip()
-            if not result_name:
+        goal_getters: list[OpenLigaDBGoalGetter] = []
+        for item in data:
+            if not isinstance(item, dict):
                 continue
-
-            points_team1 = result.get("pointsTeam1")
-            points_team2 = result.get("pointsTeam2")
-            if points_team1 is None or points_team2 is None:
-                continue
-
-            details.append(
-                {
-                    "label": OpenLigaDBAPI._result_label(result_name),
-                    "result_name": result_name,
-                    "home_score": points_team1,
-                    "away_score": points_team2,
-                    "order": int(result.get("resultOrderID") or 0),
-                    "description": result.get("resultDescription"),
-                }
+            goal_getters.append(
+                OpenLigaDBGoalGetter(
+                    goal_getter_id=int(item.get("goalGetterId") or 0),
+                    goal_getter_name=str(item.get("goalGetterName") or ""),
+                    goal_count=int(item.get("goalCount") or 0),
+                )
             )
-
-        return details
+        return goal_getters
 
     @staticmethod
     def build_match_summaries(matches: list[dict[str, Any]]) -> list[OpenLigaDBMatchSummary]:
@@ -127,36 +112,37 @@ class OpenLigaDBAPI:
                 )
 
             match_results = match.get("matchResults") or []
-            result_details = OpenLigaDBAPI._build_result_details(match_results)
-
-            def score_for(label: str) -> tuple[int | None, int | None]:
-                for detail in result_details:
-                    if detail["label"] == label:
-                        return detail["home_score"], detail["away_score"]
-                return None, None
-
-            half_time_home_score, half_time_away_score = score_for("HZ")
-            full_time_home_score, full_time_away_score = score_for("FT")
-            extra_time_home_score, extra_time_away_score = score_for("n.V.")
-            penalty_home_score, penalty_away_score = score_for("i.E.")
+            half_time = next(
+                (
+                    result
+                    for result in match_results
+                    if result.get("resultName", "").lower() == "halbzeit"
+                ),
+                None,
+            )
+            full_time = next(
+                (
+                    result
+                    for result in match_results
+                    if result.get("resultName", "").lower() == "endergebnis"
+                ),
+                None,
+            )
 
             summaries.append(
                 OpenLigaDBMatchSummary(
                     match_id=match.get("matchID"),
                     home_team=(match.get("team1") or {}).get("teamName", ""),
                     away_team=(match.get("team2") or {}).get("teamName", ""),
+                    home_team_icon_url=(match.get("team1") or {}).get("teamIconUrl"),
+                    away_team_icon_url=(match.get("team2") or {}).get("teamIconUrl"),
                     match_datetime=match.get("matchDateTime", ""),
                     finished=bool(match.get("matchIsFinished")),
                     group_name=(match.get("group") or {}).get("groupName"),
-                    home_score=full_time_home_score,
-                    away_score=full_time_away_score,
-                    result_details=result_details,
-                    half_time_home_score=half_time_home_score,
-                    half_time_away_score=half_time_away_score,
-                    extra_time_home_score=extra_time_home_score,
-                    extra_time_away_score=extra_time_away_score,
-                    penalty_home_score=penalty_home_score,
-                    penalty_away_score=penalty_away_score,
+                    half_time_home_score=half_time.get("pointsTeam1") if half_time else None,
+                    half_time_away_score=half_time.get("pointsTeam2") if half_time else None,
+                    home_score=full_time.get("pointsTeam1") if full_time else None,
+                    away_score=full_time.get("pointsTeam2") if full_time else None,
                     top_scorer_name=top_scorer_name,
                     top_scorer_goals=top_scorer_goals,
                 )

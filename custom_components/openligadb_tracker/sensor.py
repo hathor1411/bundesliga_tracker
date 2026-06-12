@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any
+from zoneinfo import ZoneInfo
 
-from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+)
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory
+from homeassistant.const import UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -17,25 +24,25 @@ from .const import COMPETITIONS, CONF_COMPETITION, CONF_SEASON, DOMAIN
 from .coordinator import OpenLigaDBCoordinator
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True, kw_only=True)
 class OpenLigaDBSensorDescription(SensorEntityDescription):
-    value_fn: Callable[[object], object]
+    """Describe one OpenLigaDB sensor."""
+
+    value_fn: Callable[[object], Any] = field(compare=False)
 
 
-SENSOR_DESCRIPTIONS = (
+COMMON_SENSOR_DESCRIPTIONS = (
     OpenLigaDBSensorDescription(
-        key="table_leader",
-        name="Table Leader",
-        value_fn=lambda data: data.table_leader["teamName"] if data.table_leader else None,
-        icon="mdi:trophy",
-        translation_key="table_leader",
+        key="schedule",
+        name="Spielplan",
+        value_fn=lambda data: len(data.upcoming_matches),
+        icon="mdi:calendar-month",
     ),
     OpenLigaDBSensorDescription(
         key="top_scorer",
         name="Top Scorer",
         value_fn=lambda data: data.top_scorer[0] if data.top_scorer else None,
         icon="mdi:soccer",
-        translation_key="top_scorer",
     ),
     OpenLigaDBSensorDescription(
         key="next_match",
@@ -46,9 +53,83 @@ SENSOR_DESCRIPTIONS = (
             else None
         ),
         icon="mdi:calendar",
-        translation_key="next_match",
+    ),
+    OpenLigaDBSensorDescription(
+        key="next_match_time",
+        name="Next Match Time",
+        value_fn=lambda data: _local_match_time_dt(data.next_match.match_datetime)
+        if data.next_match and data.next_match.match_datetime
+        else None,
+        icon="mdi:clock-outline",
+        device_class=SensorDeviceClass.TIMESTAMP,
+    ),
+    OpenLigaDBSensorDescription(
+        key="match_count",
+        name="Match Count",
+        value_fn=lambda data: len(data.matches),
+        icon="mdi:calendar-multiple",
+        native_unit_of_measurement="matches",
     ),
 )
+
+DFB_SENSOR_DESCRIPTIONS = (
+    OpenLigaDBSensorDescription(
+        key="round_overview",
+        name="Rundenuebersicht",
+        value_fn=lambda data: len(data.rounds_payload()),
+        icon="mdi:source-branch",
+    ),
+)
+
+TABLE_SENSOR_DESCRIPTIONS = (
+    OpenLigaDBSensorDescription(
+        key="table",
+        name="Tabelle",
+        value_fn=lambda data: data.table_leader["teamName"] if data.table_leader else None,
+        icon="mdi:table",
+    ),
+    OpenLigaDBSensorDescription(
+        key="table_position",
+        name="Table Position",
+        value_fn=lambda data: 1 if data.table_leader else None,
+        icon="mdi:trophy-outline",
+    ),
+    OpenLigaDBSensorDescription(
+        key="points",
+        name="Points",
+        value_fn=lambda data: data.table_leader.get("points") if data.table_leader else None,
+        icon="mdi:counter",
+        native_unit_of_measurement="pts",
+    ),
+    OpenLigaDBSensorDescription(
+        key="goals_scored",
+        name="Goals Scored",
+        value_fn=lambda data: data.table_leader.get("goals") if data.table_leader else None,
+        icon="mdi:soccer",
+        native_unit_of_measurement="goals",
+    ),
+    OpenLigaDBSensorDescription(
+        key="goals_conceded",
+        name="Goals Conceded",
+        value_fn=lambda data: data.table_leader.get("opponentGoals") if data.table_leader else None,
+        icon="mdi:soccer-field",
+        native_unit_of_measurement="goals",
+    ),
+    OpenLigaDBSensorDescription(
+        key="table_leader",
+        name="Table Leader",
+        value_fn=lambda data: data.table_leader["teamName"] if data.table_leader else None,
+        icon="mdi:trophy",
+    ),
+)
+
+
+def _local_match_time_dt(match_datetime: str) -> datetime:
+    """Convert OpenLigaDB timestamps into a timezone-aware local datetime."""
+    parsed = datetime.fromisoformat(match_datetime)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=ZoneInfo("UTC"))
+    return parsed.astimezone(ZoneInfo("Europe/Berlin"))
 
 
 async def async_setup_entry(
@@ -58,10 +139,12 @@ async def async_setup_entry(
 ) -> None:
     """Set up sensors for a config entry."""
     coordinator: OpenLigaDBCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities(
-        OpenLigaDBSensor(coordinator, entry, description)
-        for description in SENSOR_DESCRIPTIONS
-    )
+    descriptions = list(COMMON_SENSOR_DESCRIPTIONS)
+    if entry.data[CONF_COMPETITION] == "bundesliga":
+        descriptions = list(TABLE_SENSOR_DESCRIPTIONS) + descriptions
+    elif entry.data[CONF_COMPETITION] == "dfb_pokal":
+        descriptions = list(DFB_SENSOR_DESCRIPTIONS) + descriptions
+    async_add_entities([OpenLigaDBSensor(coordinator, entry, description) for description in descriptions])
 
 
 class OpenLigaDBSensor(CoordinatorEntity[OpenLigaDBCoordinator], SensorEntity):
@@ -88,7 +171,7 @@ class OpenLigaDBSensor(CoordinatorEntity[OpenLigaDBCoordinator], SensorEntity):
             model="Football competition tracker",
         )
         self._attr_icon = description.icon
-        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        self._attr_native_unit_of_measurement = description.native_unit_of_measurement
 
     @property
     def native_value(self):
@@ -105,11 +188,40 @@ class OpenLigaDBSensor(CoordinatorEntity[OpenLigaDBCoordinator], SensorEntity):
 
         data = self.coordinator.data
         top_scorer = data.top_scorer
+
+        if self.entity_description.key == "schedule":
+            return {
+                "next_match": data.next_match_payload,
+                "upcoming_matches": data.upcoming_matches_payload(limit=10),
+                "favorite_team": data.favorite_team,
+                "favorite_match_context": data.favorite_match_context_payload(),
+                "favorite_matches": data.favorite_matches_payload(limit=34),
+                "competition": COMPETITIONS[str(self.coordinator.entry.data[CONF_COMPETITION])]["name"],
+                "season": self.coordinator.season,
+            }
+
+        if self.entity_description.key == "table":
+            return {
+                "competition": COMPETITIONS[str(self.coordinator.entry.data[CONF_COMPETITION])]["name"],
+                "season": self.coordinator.season,
+                "favorite_team": data.favorite_team,
+                "rows": data.table_payload(),
+                "row_count": len(data.table),
+            }
+
+        if self.entity_description.key == "round_overview":
+            return {
+                "competition": COMPETITIONS[str(self.coordinator.entry.data[CONF_COMPETITION])]["name"],
+                "season": self.coordinator.season,
+                "favorite_team": data.favorite_team,
+                "rounds": data.rounds_payload(),
+                "round_count": len(data.rounds_payload()),
+            }
+
         return {
             "table_rows": len(data.table),
             "match_count": len(data.matches),
             "top_scorer_name": top_scorer[0] if top_scorer else None,
             "top_scorer_goals": top_scorer[1] if top_scorer else None,
             "next_match_datetime": data.next_match.match_datetime if data.next_match else None,
-            "next_match_result_details": data.next_match.result_details if data.next_match else [],
         }

@@ -4,6 +4,7 @@ DOMAIN = "openligadb_tracker"
 
 CONF_COMPETITION = "competition"
 CONF_SEASON = "season"
+CONF_FAVORITE_TEAM = "favorite_team"
 
 COMPETITIONS: dict[str, dict[str, str]] = {
     "bundesliga": {
@@ -17,4 +18,3 @@ COMPETITIONS: dict[str, dict[str, str]] = {
 }
 
 DEFAULT_SEASON = 2025
-
