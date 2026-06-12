@@ -17,9 +17,7 @@ Custom integration for Home Assistant based on OpenLigaDB.
 1. Copy `custom_components/openligadb_tracker/` into your Home Assistant `config/custom_components/` folder.
 2. Restart Home Assistant.
 3. Add the integration from the UI.
-4. Choose whether to install the dashboard.
-5. Verify the created entities in Developer Tools.
-6. If the dashboard option was enabled, open the new sidebar dashboard and check that the cards render.
+4. Verify the created entities in Developer Tools.
 
 ## API source
 
