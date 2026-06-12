@@ -4,7 +4,7 @@ OpenLigaDB-basierte Home-Assistant-Integration fuer Fussballdaten.
 
 Aktuelle Version:
 
-- `0.2.0`
+- `0.9.0`
 
 ## Was macht die Integration?
 
