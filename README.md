@@ -25,12 +25,12 @@ Custom integration for Home Assistant based on OpenLigaDB.
 
 ## Lovelace card
 
-This repository also contains a simple Lovelace card at `www/openligadb-table-card.js`.
+This repository also contains a simple Lovelace card at `www/community/openligadb-table-card/openligadb-table-card.js`.
 
 To use it in Home Assistant:
 
-1. Copy the file to `config/www/openligadb-table-card.js`.
-2. Add a Lovelace resource with URL `/local/openligadb-table-card.js` and type `module`.
+1. Copy the folder to `config/www/community/openligadb-table-card/`.
+2. Add a Lovelace resource with URL `/local/community/openligadb-table-card/openligadb-table-card.js` and type `module`.
 3. Use the card in your dashboard:
 
 ```yaml
