@@ -27,6 +27,10 @@ class OpenLigaDBMatchSummary:
     away_score: int | None
     half_time_home_score: int | None = None
     half_time_away_score: int | None = None
+    extra_time_home_score: int | None = None
+    extra_time_away_score: int | None = None
+    penalty_home_score: int | None = None
+    penalty_away_score: int | None = None
     top_scorer_name: str | None = None
     top_scorer_goals: int = 0
 
@@ -112,22 +116,25 @@ class OpenLigaDBAPI:
                 )
 
             match_results = match.get("matchResults") or []
-            half_time = next(
-                (
-                    result
-                    for result in match_results
-                    if result.get("resultName", "").lower() == "halbzeit"
-                ),
-                None,
-            )
-            full_time = next(
-                (
-                    result
-                    for result in match_results
-                    if result.get("resultName", "").lower() == "endergebnis"
-                ),
-                None,
-            )
+
+            def _result_by_kind(kind: str) -> dict[str, Any] | None:
+                return next(
+                    (
+                        result
+                        for result in match_results
+                        if result.get("resultTypeKind") == kind
+                    ),
+                    None,
+                )
+
+            half_time = _result_by_kind("HalfTime")
+            full_time = _result_by_kind("After90Minutes")
+            extra_time = _result_by_kind("AfterExtraTime")
+            penalty = _result_by_kind("AfterPenalties")
+
+            # The actual match outcome is decided in extra time if played;
+            # "After90Minutes" alone is misleading for cup matches that went on.
+            final_result = extra_time or full_time
 
             summaries.append(
                 OpenLigaDBMatchSummary(
@@ -141,8 +148,12 @@ class OpenLigaDBAPI:
                     group_name=(match.get("group") or {}).get("groupName"),
                     half_time_home_score=half_time.get("pointsTeam1") if half_time else None,
                     half_time_away_score=half_time.get("pointsTeam2") if half_time else None,
-                    home_score=full_time.get("pointsTeam1") if full_time else None,
-                    away_score=full_time.get("pointsTeam2") if full_time else None,
+                    extra_time_home_score=extra_time.get("pointsTeam1") if extra_time else None,
+                    extra_time_away_score=extra_time.get("pointsTeam2") if extra_time else None,
+                    penalty_home_score=penalty.get("pointsTeam1") if penalty else None,
+                    penalty_away_score=penalty.get("pointsTeam2") if penalty else None,
+                    home_score=final_result.get("pointsTeam1") if final_result else None,
+                    away_score=final_result.get("pointsTeam2") if final_result else None,
                     top_scorer_name=top_scorer_name,
                     top_scorer_goals=top_scorer_goals,
                 )
